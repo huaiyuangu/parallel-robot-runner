@@ -1,10 +1,13 @@
-##robot parallel runner##
+##robot parallel runner
 
-#purpose:#
+
+#Purpose:
     
     to run all robot test cases in parallel and merge all individual test report as united HTML report files
     all the test case information will be parsed out and included in notification report like Slack, Email etc.
-#example:#
+
+
+#Example:
 
     import sys
     import os
