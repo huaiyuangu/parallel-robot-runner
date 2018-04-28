@@ -1,0 +1,34 @@
+<?xml version='1.0' encoding='utf-8'?>
+<robot generated="20180428 12:01:53.466" generator="robotfixml.py">
+<suite source="/Volumes/MacintoshHD/github/robot_parallel/robot_test" id="s1" name="Robot Test">
+<suite source="/Volumes/MacintoshHD/github/robot_parallel/robot_test/test1.robot" id="s1-s1" name="Test1">
+<test id="s1-s1-t1" name="TestRobotFrameworkLogging1">
+<kw name="Log" library="BuiltIn">
+<doc>Logs the given message with the given level.</doc>
+<arguments>
+<arg>Test Logging</arg>
+</arguments>
+<msg timestamp="20180428 12:01:53.497" level="INFO">Test Logging</msg>
+<status status="PASS" endtime="20180428 12:01:53.497" starttime="20180428 12:01:53.496"></status>
+</kw>
+<status status="PASS" endtime="20180428 12:01:53.497" critical="yes" starttime="20180428 12:01:53.496"></status>
+</test>
+<status status="PASS" endtime="20180428 12:01:53.497" starttime="20180428 12:01:53.494"></status>
+</suite>
+<status status="PASS" endtime="20180428 12:01:53.498" starttime="20180428 12:01:53.469"></status>
+</suite>
+<statistics>
+<total>
+<stat fail="0" pass="1">Critical Tests</stat>
+<stat fail="0" pass="1">All Tests</stat>
+</total>
+<tag>
+</tag>
+<suite>
+<stat fail="0" id="s1" name="Robot Test" pass="1">Robot Test</stat>
+<stat fail="0" id="s1-s1" name="Test1" pass="1">Robot Test.Test1</stat>
+</suite>
+</statistics>
+<errors>
+</errors>
+</robot>

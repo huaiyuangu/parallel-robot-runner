@@ -1,0 +1,16 @@
+--test
+robot_test.test2.TestRobotFrameworkLogging2
+--suite
+robot_test.test2
+-W
+132
+-C
+off
+--pythonpath
+/Volumes/MacintoshHD/github/robot_parallel/robot_test
+--output
+/Volumes/MacintoshHD/github/robot_parallel/robot_test/test_1.xml
+--log
+None
+--report
+None

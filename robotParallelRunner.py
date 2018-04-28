@@ -5,16 +5,12 @@
 import codecs
 import os
 import time
-import json
 import random
 import socket
 import subprocess
 import threading
 import signal
-from robot.conf import RobotSettings
-from robot.running import TestSuiteBuilder
-from robotfixml import fixml
-import xmltodict
+from robotInterpreter import RobotInterpreter
 from Queue import Empty, Queue
 from robot import run_cli
 
@@ -168,123 +164,6 @@ class Process(object):
                 pass
 
 
-class TestInterpreter(object):
-    def __init__(self, pythonpath):
-        self.pythonpath = pythonpath
-
-    def create_robot_argfile(self, argFile, test, testsuite, output):
-        """
-        create pybot execution argument file
-        :param argFile:
-        :param test:
-        :param testsuite:
-        :param pythonpath:
-        :param output:
-        :return:
-        """
-        file = None
-        try:
-            with codecs.open(argFile, 'w', "utf-8") as file:
-                lines = ['--test', test, '--suite', testsuite,
-                         '-W', '132', '-C', 'off', '--pythonpath', self.pythonpath,
-                         '--output', output, '--log', 'None', '--report', 'None']
-                print ('robot test properties: %s' % ' '.join(lines))
-                for line in lines:
-                    file.writelines(line)
-                    file.writelines('\n')
-        except Exception as e:
-            print (e)
-        finally:
-            if file:
-                file.close()
-
-    def get_result_in_robot_output(self, output_file):
-        name, status, desc, error = ('None', ' None', '', '')
-        if not os.path.exists(output_file):
-            error = 'Robot output file not exists'
-            return (name, status, desc, error)
-
-        with open(output_file, 'r') as fd:
-            try:
-                doc = xmltodict.parse(fd.read())
-                test = doc['robot']['suite']['suite']['test']
-
-                name = test['@name']
-                desc = u' '.join(test['doc'].split('\n'))
-                status = test['status']['@status']
-                error = test['status']['#text'] if '#text' in test['status'] else ''
-            except Exception as e:
-                error = 'error of reading log xml file: %s' % str(e)
-
-        return (name, status, desc, error)
-
-    def getAllTestSuite(self, test_path):
-        """
-        :param test_path:
-        :return:
-        """
-        all_items = os.listdir(test_path)
-        all_suite = [i for i in all_items if os.path.isfile(os.path.join(test_path, i)) and '.robot' in i]
-        all_suite = [i.decode('utf-8') for i in all_suite if i not in ('__init__.robot', 'Definitions.robot')]
-        return all_suite
-
-    def merge_xml_reports(self, test_output, xmlfiles=[]):
-        """
-        merge robot xml reports
-        :param test_output:
-        :return:
-        """
-        xmlfiles_fixed = []
-        if xmlfiles == []:
-            for name in os.listdir(test_output):
-                p = os.path.join(test_output, name)
-                if os.path.isdir(p):
-                    continue
-                if '.xml' in name:
-                    xmlfiles.append(name)
-        print ('xml files to fix:\n%s' % ('\n'.join(xmlfiles)))
-        for name in xmlfiles:
-            inpath = os.path.join(test_output, name)
-            outpath = os.path.join(test_output, name.split('.')[0] + '-fixed.xml')
-            fixml(inpath, outpath)
-            xmlfiles_fixed.append(outpath)
-            os.remove(inpath)
-        print ('xml files fixing is done.')
-
-        # merge
-        logfile = '%s/log.html' % test_output
-        rptfile = '%s/report.html' % test_output
-        from robot.rebot import Rebot
-        bot = Rebot()
-        try:
-            bot.main(xmlfiles_fixed, merge=True, log=logfile, report=rptfile)
-            print ('robot output xml files merging is done.')
-        except Exception as e:
-            print ('=' * 10 + ' Robot report exception %s' % '=' * 10)
-            print (e)
-
-    def get_suite_testcases(self, test_suite_path):
-        """
-        parse test case name from robot test suite
-        :param test_suite_path:
-        :return: test names list
-        """
-        settings = RobotSettings()
-        builder = TestSuiteBuilder(settings['SuiteNames'],
-                                   settings['RunEmptySuite'])
-        data = builder._parse(test_suite_path)
-        tests = [test.name for test in data.testcase_table.tests]
-        print ('\n'.join(tests))
-        return tests
-
-    def get_test_config(self, file_path):
-        with codecs.open(file_path, 'rb', encoding='utf-8') as fh:
-            lines = fh.read()
-        i = 0
-        ls = lines.split(u'\n')
-        return ls
-
-
 class TestRunThread(threading.Thread):
     """
     check all resource pool status and store in database
@@ -316,39 +195,43 @@ class TestRunThread(threading.Thread):
         self.status = status
 
 
-class TestExecutor(object):
+class RobotParalleRunner(object):
     """
     Execute Robot test cases in pararrel
     """
 
-    def __init__(self, pythonpath, isDebug=False):
-        self.test = TestInterpreter(pythonpath)
+    def __init__(self, pythonLibPath, isDebug=False):
+        self.test = RobotInterpreter(pythonLibPath)
         # test path
-        self.pythonpath = pythonpath
+        self.pythonpath = pythonLibPath
         self.test_target = 'product'
         self.test_type = 'smoketest'
-        self.test_target_path = ROBOT_TESTCASE_PATH
-        self.test_output_file = os.path.join(ROBOT_REPORT_PATH, 'test_output.txt')
-        self.proxy_output_file = os.path.join(ROBOT_REPORT_PATH, 'proxy_output.txt')
+        self.test_target_path = None
+        self.test_output = None
+        self.testcase_dir = None
+        self.test_output_file = None
+        self.proxy_output_file = None
         self.debug = isDebug
         self.test_properties_list = []
         self.proxyThread = None
 
-    def build_robot_test_properties(self):
+    def parse_robot_test_properties(self,  robot_testcase_dir):
         """
         parse test case from .robot test suite
         generate .txt robot execution argument file
         :return:
         """
+        self.test_target_path = self.testcase_dir = self.test_output = robot_testcase_dir
+        self.test_output_file = os.path.join(ROBOT_REPORT_PATH, 'test_output.txt')
+        self.proxy_output_file = os.path.join(ROBOT_REPORT_PATH, 'proxy_output.txt')
 
         print ('==== start main execution run ====')
-        self.kill_existed_processes()
 
         # test suite file
         all_suites = []
-        for file in os.listdir(self.test_target_path):
+        for file in os.listdir(robot_testcase_dir):
             if file.endswith(".robot"):
-                p = os.path.join(self.test_target_path, file)
+                p = os.path.join(robot_testcase_dir, file)
                 print ('found test suite file :%s' % p)
                 all_suites.append(p)
 
@@ -364,18 +247,19 @@ class TestExecutor(object):
                 case = cases[i]
                 argFile = os.path.join(self.test_output, 'test_%s.txt' % id)
                 output = os.path.join(self.test_output, 'test_%s.xml' % id)
-                suite_name = os.path.basename(suite).split('.')[0]  # '.robot')
+                suite_name = os.path.basename(suite).split('.')[0]
 
                 # robot argument file
+                # use base path in test case & suite
+                base_dir = os.path.basename(self.testcase_dir)
                 self.test.create_robot_argfile(argFile,
-                                               u'%s.%s.%s' % (self.testcase_dir, suite_name, case),
-                                               u'%s.%s' % (self.testcase_dir, suite_name),
+                                               u'%s.%s.%s' % (base_dir, suite_name, case),
+                                               u'%s.%s' % (base_dir, suite_name),
                                                output)
 
                 # command line to start robot execution
-                cmds = ['export platform_browser=%s_%s' % (self.platform, self.browser),
-                        'export usergroup_id=%s' % id,
-                        'pybot --argumentfile %s %s' % (argFile, self.test_target_path)]
+                cmds = ['export user_id=%s' % id,
+                        'pybot --argumentfile %s %s' % ('"%s"' % argFile, '"%s"' % self.test_target_path)]
 
                 # create properties list
                 self.test_properties_list.append({'cmd': '; '.join(cmds), 'output': output,
@@ -392,8 +276,6 @@ class TestExecutor(object):
 
         # send test report
         #self.send_report(process_ls, duration,  job_id, job_username)
-
-        self.kill_existed_processes()
 
         # merge report
         self.test.merge_xml_reports(self.test_output)
@@ -444,7 +326,7 @@ class TestExecutor(object):
             p = os.path.join(self.test_output, item)
             if os.path.isdir(p):
                 continue
-            if '.zip' in item:
+            if '.zip' in item or '.robot' in item or '.py' in item:
                 continue
             os.remove(p)
         print ('all logfines in %s are cleaned out' % self.test_output)
@@ -464,59 +346,50 @@ class TestExecutor(object):
             active_threads += 1
 
         print ('==== all %s tests started ====' % len(self.test_properties_list))
-
-        results = []
         t0 = time.time()
         finished_tests = []
-        total_count = len(self.test_properties_list)
         while (time.time() - t0) < timeout:
-            time.sleep(10)
-
-            # loop for  all processes
+            time.sleep(5)
+            if len(self.test_properties_list) == 0:
+                break
             for i in range(len(self.test_properties_list)):
                 run = self.test_properties_list[i]
-
                 last_ts = run['ts'][-1] if len(run['ts']) > 0 else t0
 
                 # kill browsers to force webdriver exists test
                 if self.debug:
                     if time.time() - last_ts > 6 * 60:
                         self.kill_all_browsers()
-                else:
-                    # todo avoid being stuck in run
-                    if time.time() - t0 > 20 * 60:
-                        self.kill_all_browsers()
 
-                if run['p'].is_alive() == True:
+                if run['p'].is_alive():
                     continue
-                if run['p'].is_alive() is None:
+                elif run['p'].is_alive() is None:
                     continue
                 name, status, desc, error = self.test.get_result_from_robot_output(run['output'])
                 duration = int(time.time() - last_ts)
 
                 # status printing
-                print (self.temp_result % (name, status,
-                                    self.test_properties_list[i]['retry'],
-                                    '%s (s)' % duration, error))
+                print ("Test %s, Status %s, Retry %s, Duration %s, Error %s" %
+                       (name,
+                        status,
+                        self.test_properties_list[i]['retry'],
+                        '%s (s)' % duration,
+                        error))
 
                 self.test_properties_list[i]['name'], self.test_properties_list[i]['status'] = [name, status]
 
                 # push end timestamp
                 run['ts'].append(time.time())
-                if run['status'] == 'PASS' or run['retry'] >= 2 or self.platform == 'debug':
+                if run['status'] in ()run['status'] == 'PASS' or run['retry'] >= 2 or self.debug:
                     self.test_properties_list[i]['duration'] = duration
                     self.test_properties_list[i]['desc'] = desc
                     self.test_properties_list[i]['error'] = error
                     finished_tests.append(self.test_properties_list.pop(i))
-
                     break
 
                 # retry failed case
                 self.test_properties_list[i]['retry'] += 1
                 self.test_properties_list[i]['p'].run_command(run['cmd'])
-
-            if len(self.test_properties_list) == 0:
-                break
 
         while len(self.test_properties_list) > 0:
             finished_tests.append(self.test_properties_list.pop(0))
@@ -531,7 +404,7 @@ class TestExecutor(object):
         """
         pass
 
-    def send_report_slack(self, status, message, room="playerautotest", sender="playerautotest"):
+    def send_report_slack(self, status, message, room="Test_Room", sender="*"):
         """
         :param status:
         :param message:
@@ -541,7 +414,7 @@ class TestExecutor(object):
         """
         pass
 
-    def send_report_hipchat(self, status, message, room="Test Room", sender="PlayerAutoTest"):
+    def send_report_hipchat(self, status, message, room="Test_Room", sender="*"):
         """
         :param status:
         :param message:
@@ -556,6 +429,10 @@ class TestExecutor(object):
         pass
 
     def kill_existed_processes(self):
+        """
+        for selenium test on chrome, to clean up existed browser
+        :return:
+        """
 
         cmds = ['ps -ef|grep Xvfb|grep -v grep|awk \'{print $2}\'|tr ["\\n"] [" "]|xargs kill -9',
                 'ps -ef|grep chrome/chrome|grep -v grep|awk \'{print $2}\'|tr ["\\n"] [" "]|xargs kill -9']
@@ -569,32 +446,13 @@ class TestExecutor(object):
         print ('all existed Xvfb & chrome process are killed before starting tests.')
 
     def kill_all_browsers(self):
+        """
+        for selenium test on chrome, to clean up existed browser
+        :return:
+        """
         print ('debugging: kill chrome browsers to end up long test.')
         kill_chrome_cmd = '''ps -ef|grep chrome/chrome|grep -v grep|awk '{print $2}'|tr ["\n"] [" "]|xargs kill -9'''
         p = Process(self.test_target_path)
         p.run_command(kill_chrome_cmd)
         time.sleep(5)
-
-def main(): pass
-
-if __name__ == '__main__':
-    import zipfile, sys
-
-    zip_file = '/Users/huaiyuan.gu/HD/player_auto_test/python_auto.zip'
-
-    e = TestExecutor("", "", "", "")
-    e.extract_robot_files(zip_file)
-    sys.exit(0)
-    #     def send_report(self, processes, duration, notify_room, job_id, job_username, version):
-    # ['suite'], r['name'],r['status'], r['error'], str(r['retry']), r['duration'], r['desc']
-    ps = [
-        {'suite':'test', 'name':"test case name",'status':"PASSED",'error':"nothing",'retry':"4",'duration':"60",'desc':"this is test for notification"},
-    ]
-    ps = ps * 4
-    e.test_target='site_player'
-    e.test_type='smoketest'
-    e.send_report(ps, 60, 'playerautotest', 11, 'huaiyuan.gu', '234556ewerwerw')
-    #e.send_report_slack(status, s, room='playerautotest')
-
-    #SlackNotifier().notify(msg)
 
