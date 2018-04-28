@@ -280,9 +280,6 @@ class RobotParalleRunner(object):
         # merge report
         self.test.merge_xml_reports(self.test_output)
 
-    def start_robot_single_test(self):
-        pass
-
     def extract_robot_files(self, zf):
         """
         zip file
@@ -350,12 +347,14 @@ class RobotParalleRunner(object):
         finished_tests = []
         while (time.time() - t0) < timeout:
             time.sleep(5)
-            if len(self.test_properties_list) == 0:
+            if len([r['duration'] for r in self.test_properties_list if r['duration'] == 0]) == 0:
                 break
+
             for i in range(len(self.test_properties_list)):
                 run = self.test_properties_list[i]
+                if run['status'] == 'PASS':
+                    continue
                 last_ts = run['ts'][-1] if len(run['ts']) > 0 else t0
-
                 # kill browsers to force webdriver exists test
                 if self.debug:
                     if time.time() - last_ts > 6 * 60:
@@ -380,12 +379,11 @@ class RobotParalleRunner(object):
 
                 # push end timestamp
                 run['ts'].append(time.time())
-                if run['status'] in ()run['status'] == 'PASS' or run['retry'] >= 2 or self.debug:
-                    self.test_properties_list[i]['duration'] = duration
-                    self.test_properties_list[i]['desc'] = desc
-                    self.test_properties_list[i]['error'] = error
-                    finished_tests.append(self.test_properties_list.pop(i))
-                    break
+                if run['status'] in ('PASS', 'FAIL'):
+                    if run['status'] == 'PASS' or run['retry'] >= 2 or self.debug:
+                        self.test_properties_list[i]['duration'] = duration
+                        self.test_properties_list[i]['desc'] = desc
+                        self.test_properties_list[i]['error'] = error
 
                 # retry failed case
                 self.test_properties_list[i]['retry'] += 1

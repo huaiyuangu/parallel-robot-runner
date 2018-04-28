@@ -1,5 +1,5 @@
 <?xml version='1.0' encoding='utf-8'?>
-<robot generated="20180428 12:01:53.466" generator="robotfixml.py">
+<robot generated="20180428 12:39:32.119" generator="robotfixml.py">
 <suite source="/Volumes/MacintoshHD/github/robot_parallel/robot_test" id="s1" name="Robot Test">
 <suite source="/Volumes/MacintoshHD/github/robot_parallel/robot_test/test1.robot" id="s1-s1" name="Test1">
 <test id="s1-s1-t1" name="TestRobotFrameworkLogging1">
@@ -8,14 +8,14 @@
 <arguments>
 <arg>Test Logging</arg>
 </arguments>
-<msg timestamp="20180428 12:01:53.497" level="INFO">Test Logging</msg>
-<status status="PASS" endtime="20180428 12:01:53.497" starttime="20180428 12:01:53.496"></status>
+<msg timestamp="20180428 12:39:32.151" level="INFO">Test Logging</msg>
+<status status="PASS" endtime="20180428 12:39:32.151" starttime="20180428 12:39:32.150"></status>
 </kw>
-<status status="PASS" endtime="20180428 12:01:53.497" critical="yes" starttime="20180428 12:01:53.496"></status>
+<status status="PASS" endtime="20180428 12:39:32.151" critical="yes" starttime="20180428 12:39:32.150"></status>
 </test>
-<status status="PASS" endtime="20180428 12:01:53.497" starttime="20180428 12:01:53.494"></status>
+<status status="PASS" endtime="20180428 12:39:32.151" starttime="20180428 12:39:32.148"></status>
 </suite>
-<status status="PASS" endtime="20180428 12:01:53.498" starttime="20180428 12:01:53.469"></status>
+<status status="PASS" endtime="20180428 12:39:32.152" starttime="20180428 12:39:32.123"></status>
 </suite>
 <statistics>
 <total>
